@@ -2,7 +2,6 @@
 fx_version 'cerulean'
 games { 'gta5' }
 
-description 'Example resource'
 version '1.0.3'
  
 description 'ESX Property'
