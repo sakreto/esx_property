@@ -11,6 +11,8 @@ local Keys = {
 }
 
 ESX                           = nil
+TriggerEvent('esx:getSharedObject', function(obj) ESX = obj end)
+
 local GUI                     = {}
 GUI.Time                      = 0
 local OwnedProperties         = {}
@@ -26,14 +28,19 @@ local CurrentActionData       = {}
 local FirstSpawn              = true
 local HasChest                = false
 
+-- Varaibles to track currentPed and Also their coordinates (These are updated every second)
+local myPed                   = nil
+local myPedLocation           = nil
+local isNearMarker            = false
+
 
 Citizen.CreateThread(function()
 	while ESX == nil do
 		TriggerEvent('esx:getSharedObject', function(obj) ESX = obj end)
-		Citizen.Wait(10)
+		Citizen.Wait(5)
 	end
 
-	Citizen.Wait(5000)
+	Citizen.Wait(5)
 	PlayerData = ESX.GetPlayerData()
 end)
 
@@ -998,54 +1005,167 @@ Citizen.CreateThread(function()
 
 end)
 
-local isNearMarker = false
-local myPed, myPedLocation = nil, nil
-
 local RunMainThread = function()
-  Citizen.CreateThread(function()
-    while true do
-  
-      Wait(10)
-  
-      local coords = GetEntityCoords(GetPlayerPed(-1))
-  
-      for i=1, #Config.Properties, 1 do
-  
-        local property = Config.Properties[i]
-        local isHost   = false
-  
-        if(property.entering ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.entering.x, property.entering.y, property.entering.z, true) < Config.DrawDistance) then
-          DrawMarker(Config.MarkerType, property.entering.x, property.entering.y, property.entering.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, Config.MarkerSize.x, Config.MarkerSize.y, Config.MarkerSize.z, Config.MarkerColor.r, Config.MarkerColor.g, Config.MarkerColor.b, 100, false, true, 2, false, false, false, false)
+
+    -- Marker Drawing
+    Citizen.CreateThread(function()
+        while isNearMarker do
+    
+            Wait(0)
+        
+            local coords = GetEntityCoords(GetPlayerPed(-1))
+        
+            for i=1, #Config.Properties, 1 do
+        
+                local property = Config.Properties[i]
+                local isHost   = false
+        
+                if(property.entering ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.entering.x, property.entering.y, property.entering.z, true) < Config.DrawDistance) then
+                    DrawMarker(Config.MarkerType, property.entering.x, property.entering.y, property.entering.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, Config.MarkerSize.x, Config.MarkerSize.y, Config.MarkerSize.z, Config.MarkerColor.r, Config.MarkerColor.g, Config.MarkerColor.b, 100, false, true, 2, false, false, false, false)
+                end
+        
+                if(property.exit ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.exit.x, property.exit.y, property.exit.z, true) < Config.DrawDistance) then
+                    DrawMarker(Config.MarkerType, property.exit.x, property.exit.y, property.exit.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, Config.MarkerSize.x, Config.MarkerSize.y, Config.MarkerSize.z, Config.MarkerColor.r, Config.MarkerColor.g, Config.MarkerColor.b, 100, false, true, 2, false, false, false, false)
+                end
+        
+                if(property.roomMenu ~= nil and HasChest and not property.disabled and GetDistanceBetweenCoords(coords, property.roomMenu.x, property.roomMenu.y, property.roomMenu.z, true) < Config.DrawDistance) then
+                    DrawMarker(Config.MarkerType, property.roomMenu.x, property.roomMenu.y, property.roomMenu.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, Config.MarkerSize.x, Config.MarkerSize.y, Config.MarkerSize.z, Config.RoomMenuMarkerColor.r, Config.RoomMenuMarkerColor.g, Config.RoomMenuMarkerColor.b, 100, false, true, 2, false, false, false, false)
+                end
+            end
         end
-  
-        if(property.exit ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.exit.x, property.exit.y, property.exit.z, true) < Config.DrawDistance) then
-          DrawMarker(Config.MarkerType, property.exit.x, property.exit.y, property.exit.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, Config.MarkerSize.x, Config.MarkerSize.y, Config.MarkerSize.z, Config.MarkerColor.r, Config.MarkerColor.g, Config.MarkerColor.b, 100, false, true, 2, false, false, false, false)
+    end)
+
+
+    -- Enter / Exit marker events
+    Citizen.CreateThread(function()
+        while isNearMarker do
+
+            Wait(0)
+
+            local coords          = GetEntityCoords(GetPlayerPed(-1))
+            local isInMarker      = false
+            local currentProperty = nil
+            local currentPart     = nil
+
+            for i=1, #Config.Properties, 1 do
+
+                local property = Config.Properties[i]
+
+                if(property.entering ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.entering.x, property.entering.y, property.entering.z, true) < Config.MarkerSize.x) then
+                    isInMarker      = true
+                    currentProperty = property.name
+                    currentPart     = 'entering'
+                end
+
+                if(property.exit ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.exit.x, property.exit.y, property.exit.z, true) < Config.MarkerSize.x) then
+                    isInMarker      = true
+                    currentProperty = property.name
+                    currentPart     = 'exit'
+                end
+
+                if(property.inside ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.inside.x, property.inside.y, property.inside.z, true) < Config.MarkerSize.x) then
+                    isInMarker      = true
+                    currentProperty = property.name
+                    currentPart     = 'inside'
+                end
+
+                if(property.outside ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.outside.x, property.outside.y, property.outside.z, true) < Config.MarkerSize.x) then
+                    isInMarker      = true
+                    currentProperty = property.name
+                    currentPart     = 'outside'
+                end
+
+                if(property.roomMenu ~= nil and HasChest and not property.disabled and GetDistanceBetweenCoords(coords, property.roomMenu.x, property.roomMenu.y, property.roomMenu.z, true) < Config.MarkerSize.x) then
+                    isInMarker      = true
+                    currentProperty = property.name
+                    currentPart     = 'roomMenu'
+                end
+                Citizen.Wait(0)
+            end
+
+            if isInMarker and not HasAlreadyEnteredMarker or (isInMarker and (LastProperty ~= currentProperty or LastPart ~= currentPart) ) then
+
+                HasAlreadyEnteredMarker = true
+                LastProperty            = currentProperty
+                LastPart                = currentPart
+
+                TriggerEvent('esx_property:hasEnteredMarker', currentProperty, currentPart)
+            end
+
+            if not isInMarker and HasAlreadyEnteredMarker then
+
+                HasAlreadyEnteredMarker = false
+
+                TriggerEvent('esx_property:hasExitedMarker', LastProperty, LastPart)
+            end
+            Citizen.Wait(5)
         end
-  
-        if(property.roomMenu ~= nil and HasChest and not property.disabled and GetDistanceBetweenCoords(coords, property.roomMenu.x, property.roomMenu.y, property.roomMenu.z, true) < Config.DrawDistance) then
-          DrawMarker(Config.MarkerType, property.roomMenu.x, property.roomMenu.y, property.roomMenu.z, 0.0, 0.0, 0.0, 0, 0.0, 0.0, Config.MarkerSize.x, Config.MarkerSize.y, Config.MarkerSize.z, Config.RoomMenuMarkerColor.r, Config.RoomMenuMarkerColor.g, Config.RoomMenuMarkerColor.b, 100, false, true, 2, false, false, false, false)
+    end)
+
+    -- Key controls
+    Citizen.CreateThread(function()
+        while isNearMarker do
+            Citizen.Wait(0)
+
+            if CurrentAction ~= nil then
+
+                SetTextComponentFormat('STRING')
+                AddTextComponentString(CurrentActionMsg)
+                DisplayHelpTextFromStringLabel(0, 0, 1, -1)
+
+                if IsControlPressed(0,  Keys['E']) and (GetGameTimer() - GUI.Time) > 300 then
+                    if CurrentAction == 'property_menu' then
+                        OpenPropertyMenu(CurrentActionData.property)
+                    end
+
+                    if CurrentAction == 'gateway_menu' then
+                        if Config.EnablePlayerManagement then
+                            OpenGatewayOwnedPropertiesMenu(CurrentActionData.property)
+                        else
+                            OpenGatewayMenu(CurrentActionData.property)
+                        end
+                    end
+
+                    if CurrentAction == 'room_menu' then
+                        OpenRoomMenu(CurrentActionData.property, CurrentActionData.owner)
+                    end
+
+                    if CurrentAction == 'room_exit' then
+                        TriggerEvent('instance:leave')
+                    end
+
+                    CurrentAction = nil
+                    GUI.Time      = GetGameTimer()
+                end
+            end
         end
-  
-      end
-  
-    end
-  end)
+    end)
 end
 
+
 Citizen.CreateThread(function()
-    while true do
-        myPed = PlayerPedId()
-        myPedLocation = GetEntityCoords(myPed)
-        if #(myPedLocation-propiedades.entrada) < Config.DrawDistance then
-            if not isNearMarker then
-                isNearMarker = true
-                RunMainThread()
-            end
-        else
-            isNearMarker = false
-        end
-        Wait(1000)
-    end
+  while true do
+      myPed = PlayerPedId()
+      myPedLocation = GetEntityCoords(myPed)
+      local foundValue = false
+      
+      for k, v in ipairs(propiedades.entrada) do 
+          if #(myPedLocation-v) < Config.DrawDistance then
+              if not isNearMarker then
+                  isNearMarker = true
+                  foundValue = true
+                  RunMainThread()
+                  Wait(10000) 
+              end
+              break
+          end
+      end
+
+      if not foundValue and isNearMarker then
+          isNearMarker = false
+      end
+      Wait(50)
+  end
 end)
 
 
@@ -1079,114 +1199,3 @@ end)
 --  end
 --end)
 --
--- Enter / Exit marker events
-Citizen.CreateThread(function()
-  while true do
-
-    Wait(10)
-
-    local coords          = GetEntityCoords(GetPlayerPed(-1))
-    local isInMarker      = false
-    local currentProperty = nil
-    local currentPart     = nil
-
-    for i=1, #Config.Properties, 1 do
-
-      local property = Config.Properties[i]
-
-      if(property.entering ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.entering.x, property.entering.y, property.entering.z, true) < Config.MarkerSize.x) then
-        isInMarker      = true
-        currentProperty = property.name
-        currentPart     = 'entering'
-      end
-
-      if(property.exit ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.exit.x, property.exit.y, property.exit.z, true) < Config.MarkerSize.x) then
-        isInMarker      = true
-        currentProperty = property.name
-        currentPart     = 'exit'
-      end
-
-      if(property.inside ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.inside.x, property.inside.y, property.inside.z, true) < Config.MarkerSize.x) then
-        isInMarker      = true
-        currentProperty = property.name
-        currentPart     = 'inside'
-      end
-
-      if(property.outside ~= nil and not property.disabled and GetDistanceBetweenCoords(coords, property.outside.x, property.outside.y, property.outside.z, true) < Config.MarkerSize.x) then
-        isInMarker      = true
-        currentProperty = property.name
-        currentPart     = 'outside'
-      end
-
-      if(property.roomMenu ~= nil and HasChest and not property.disabled and GetDistanceBetweenCoords(coords, property.roomMenu.x, property.roomMenu.y, property.roomMenu.z, true) < Config.MarkerSize.x) then
-        isInMarker      = true
-        currentProperty = property.name
-        currentPart     = 'roomMenu'
-      end
-        Citizen.Wait(5)
-    end
-
-    if isInMarker and not HasAlreadyEnteredMarker or (isInMarker and (LastProperty ~= currentProperty or LastPart ~= currentPart) ) then
-
-      HasAlreadyEnteredMarker = true
-      LastProperty            = currentProperty
-      LastPart                = currentPart
-
-      TriggerEvent('esx_property:hasEnteredMarker', currentProperty, currentPart)
-    end
-
-    if not isInMarker and HasAlreadyEnteredMarker then
-
-      HasAlreadyEnteredMarker = false
-
-      TriggerEvent('esx_property:hasExitedMarker', LastProperty, LastPart)
-    end
-    Citizen.Wait(5)
-  end
-end)
-
--- Key controls
-Citizen.CreateThread(function()
-  while true do
-
-    Citizen.Wait(0)
-
-    if CurrentAction ~= nil then
-
-      SetTextComponentFormat('STRING')
-      AddTextComponentString(CurrentActionMsg)
-      DisplayHelpTextFromStringLabel(0, 0, 1, -1)
-
-      if IsControlPressed(0,  Keys['E']) and (GetGameTimer() - GUI.Time) > 300 then
-
-        if CurrentAction == 'property_menu' then
-          OpenPropertyMenu(CurrentActionData.property)
-        end
-
-        if CurrentAction == 'gateway_menu' then
-
-          if Config.EnablePlayerManagement then
-            OpenGatewayOwnedPropertiesMenu(CurrentActionData.property)
-          else
-            OpenGatewayMenu(CurrentActionData.property)
-          end
-
-        end
-
-        if CurrentAction == 'room_menu' then
-          OpenRoomMenu(CurrentActionData.property, CurrentActionData.owner)
-        end
-
-        if CurrentAction == 'room_exit' then
-          TriggerEvent('instance:leave')
-        end
-
-        CurrentAction = nil
-        GUI.Time      = GetGameTimer()
-
-      end
-
-    end
-
-  end
-end)
